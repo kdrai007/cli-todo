@@ -2,11 +2,12 @@
 # ptodo/cli.py
 
 from pathlib import Path
-from typing import Optional
+
+from typing import Optional, List
 
 import typer
 
-from ptodo import __app_name__, __version__, ERRORS, config, database
+from ptodo import __app_name__, __version__, ERRORS, config, database, ptodo
 
 app = typer.Typer()
 
@@ -39,6 +40,93 @@ def init(
     else:
         typer.secho(
             f"The todo database location is {db_path}",
+            fg=typer.colors.GREEN
+        )
+
+
+def get_todoer() -> ptodo.Todoer:
+    if config.CONFIG_FILE_PATH.exists():
+        db_path = database.get_database_path(config.CONFIG_FILE_PATH)
+    else:
+        typer.secho("Config file not found,Please run 'ptodo init'",
+                    fg=typer.colors.RED)
+        raise typer.Exit()
+    if db_path.exists():
+        return ptodo.Todoer(db_path)
+
+    else:
+        typer.secho("Config file not found,Please run 'ptodo init'",
+                    fg=typer.colors.RED)
+        raise typer.Exit()
+
+
+@app.command()
+def add(
+        description: List[str] = typer.Argument(...),
+        priority: int = typer.Option(2, "--priority", "-p", min=1, max=3)
+
+) -> None:
+    todoer = get_todoer()
+    todo, error = todoer.add(description, priority)
+    if error:
+        typer.secho(
+            f'Adding to-do failed with "{ERRORS[error]}"',
+            fg=typer.colors.RED
+        )
+        raise typer.Exit(1)
+    else:
+        typer.secho(
+            f"""to-do: "{description}" was added """
+            f"""with priority: "{priority}" """,
+            fg=typer.colors.GREEN
+        )
+
+
+@app.command(name="list")
+def list_all() -> None:
+    """List all to-dos."""
+    todoer = get_todoer()
+    todo_list = todoer.get_todo_list()
+    if len(todo_list) == 0:
+        typer.secho(
+            "There are no tasks in the to-do list yet", fg=typer.colors.RED
+        )
+        raise typer.Exit()
+    typer.secho("\nto-do list:\n", fg=typer.colors.BLUE, bold=True)
+    columns = (
+        "ID.  ",
+        "| Priority  ",
+        "| Done  ",
+        "| Description  ",
+    )
+    headers = "".join(columns)
+    typer.secho(headers, fg=typer.colors.BLUE, bold=True)
+    typer.secho("-" * len(headers), fg=typer.colors.BLUE)
+    for id, todo in enumerate(todo_list, 1):
+        desc, priority, done = todo.values()
+        typer.secho(
+            f"{id}{(len(columns[0]) - len(str(id))) * ' '}"
+            f"| ({priority}){(len(columns[1]) - len(str(priority)) - 4) * ' '}"
+            f"| {done}{(len(columns[2]) - len(str(done)) - 2) * ' '}"
+            f"| {desc}",
+            fg=typer.colors.BLUE,
+        )
+    typer.secho("-" * len(headers) + "\n", fg=typer.colors.BLUE)
+
+
+@app.command(name="complete")
+def set_done(todo_id: int = typer.Argument(...)) -> None:
+    todoer = get_todoer()
+    todo, error = todoer.set_done(todo_id)
+    if error:
+        typer.secho(
+            f"Completing to-do #{todo_id} failed with {ERRORS[error]}",
+            fg=typer.colors.RED
+        )
+        raise typer.Exit(1)
+    else:
+        typer.secho(
+            f"""todo #{todo_id} "{todo["Description"]} "Completed!""",
             fg=typer.colors.GREEN
         )
 
